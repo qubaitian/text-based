@@ -1,4 +1,5 @@
 import './line.css';
+import { changeMap } from './ink';
 import {
   SKILLS, inCombat, lessonOf, round, talkOf, targetsOf, unitOf, walkLeft,
   type Board, type Hit, type SkillId, type Unit,
@@ -62,6 +63,7 @@ function tickStep(scale: number) {
 /** 游戏页面。联网在 main.ts，这里只管画和点。上面一排卡片，下面一条数轴 */
 export class LineView {
   private board: Board | null = null;
+  private next: Board | null = null; // 水墨还没放完时，新地图先放这里
   private hover: number | null = null; // 鼠标在数轴上指着哪里，是离原点几米，已经对到 0.1
   private cardKey = ''; // 上次排卡片时有哪些人，没变就只改数字，免得点卡片时卡片被换掉
   private talkKey = ''; // 上次画对话框时的内容，没变就不重画
@@ -93,6 +95,7 @@ export class LineView {
     this.root = document.createElement('div');
     this.root.className = 'linepage';
     this.root.innerHTML = `
+      <div class="stage"></div>
       <div class="cards"></div>
       <div class="talk" hidden></div>
       <div class="axiswrap"><div class="axis"></div><svg class="fx"><defs>
@@ -164,6 +167,21 @@ export class LineView {
 
   /** 服务器发来新的数轴 */
   update(board: Board) {
+    // 换了一张新地图（比如重新开始），先放水墨：盖住上面的区域，换上新地图，再打开
+    if (this.next) {
+      this.next = board;
+      return;
+    }
+    if (this.board && board.id !== this.board.id) {
+      this.next = board;
+      void changeMap(this.root.querySelector('.stage')!, board.place, () => {
+        this.board = this.next;
+        this.next = null;
+        this.lastHit = this.board?.hit?.n ?? 0;
+        this.render();
+      });
+      return;
+    }
     this.board = board;
     this.render();
     // 出招编号变了就播一次效果。刚连上时看到的是以前的出招，不播；重新开始后编号从 0 算起

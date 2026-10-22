@@ -16,7 +16,7 @@ export const FOE_GAP = 0.2; // 和敌人至少隔这么多米，走到这么近�
 export const round = (n: number) => Math.round(n * 1e6) / 1e6;
 
 /** 师傅一句一句教。走起来以后说第二句，木桩打坏以后说第三句 */
-export const LESSONS = ['点下面的数轴，走过去', '走到木桩 1 米以内，点「拳」，再点一下出招，把两个木桩都打坏', '过来和我聊聊'];
+export const LESSONS = ['点下面的数轴，走过去', '走到木桩 1 米以内，点「拳」，再确认目标，把两个木桩都打坏', '过来和我聊聊'];
 export const TEACHER = 'shifu'; // 谁在对话框里教
 
 export type Side = 'friend' | 'foe';
@@ -39,7 +39,8 @@ export interface Unit {
 }
 
 export interface Board {
-  id: string;
+  id: string; // 每张新地图都不一样，页面看到它变了就播水墨
+  place: string; // 地名，水墨盖住时写在中间
   units: Unit[];
   time: number; // 开局以来过了多少秒
   lesson: number; // 师傅教到第几句，是 LESSONS 的下标；等于 LESSONS.length 就是教完了
@@ -104,7 +105,7 @@ export function createTutorial(): Board {
   ];
   // 冷却先都是 0，第一次推进时间时认出“进入战斗”，再随机分
   return {
-    id: Math.random().toString(36).slice(2), units, time: 0, lesson: 0,
+    id: Math.random().toString(36).slice(2), place: '教学关', units, time: 0, lesson: 0,
     talkTo: null, talking: null, hit: null, fighting: false,
   };
 }

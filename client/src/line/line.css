@@ -13,6 +13,31 @@
 .linepage .talk { grid-row: 2; grid-column: 1; }
 .linepage .axiswrap { grid-row: 3; grid-column: 1; }
 .linepage .actions { grid-row: 4; }
+/* 水墨盖的地方：动作栏上面的整块，卡片、对话框、数轴、冷却条。平时是空的，点得穿 */
+.linepage .stage {
+  grid-row: 1 / 4; grid-column: 1 / -1; margin: -16px -16px 0;
+  position: relative; z-index: 5; overflow: hidden; pointer-events: none;
+}
+
+/* ---- 换地图的动效（水墨）：.shut 是盖住，.named 是地名显出来 ---- */
+.linepage .inkfx { position: absolute; inset: 0; pointer-events: auto; }
+.linepage .inkfx .place {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: clamp(40px, 8vw, 88px); font-weight: 900; letter-spacing: 0.4em; text-indent: 0.4em;
+  color: var(--paper); opacity: 0; transform: scale(0.96); transition: opacity 0.3s, transform 0.9s ease-out;
+}
+.linepage .inkfx.named .place { opacity: 1; transform: none; }
+/* 墨从四周往中间晕开（中间的空洞变小），打开时空洞从中间变大。毛边靠噪声滤镜。
+   墨比盖的区域大一圈，毛边扭出来的缺口落在看不见的地方 */
+@property --hole { syntax: '<percentage>'; inherits: false; initial-value: 90%; }
+.linepage .inkfx .ink { position: absolute; inset: -15%; filter: url(#ink-edge); }
+.linepage .inkfx .cover {
+  position: absolute; inset: 0; background: var(--ink);
+  --hole: 90%;
+  mask-image: radial-gradient(circle at 50% 50%, transparent var(--hole), #000 calc(var(--hole) + 12%));
+  transition: --hole 0.9s cubic-bezier(0.5, 0, 0.3, 1);
+}
+.linepage .inkfx.shut .cover { --hole: -15%; }
 .linepage button {
   font: inherit; color: var(--ink); background: var(--paper);
   border: 1px solid var(--ink); border-radius: 0; cursor: pointer;
