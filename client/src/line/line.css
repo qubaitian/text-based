@@ -47,9 +47,14 @@
 .linepage button.on { background: var(--ink); color: var(--paper); }
 
 /* ---- 卡片：一人一张。敌人的名字栏黑底白字，自己的名字加下划线 ---- */
-.linepage .cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.linepage { --card-h: 160px; }
+/* 卡片区固定留两行高，人少时空着，换幕时下面的东西不跟着上下动。放不下两行（比如手机上）就在区里滚 */
+.linepage .cards {
+  display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-start; gap: 12px;
+  height: calc(var(--card-h) * 2 + 12px); overflow-y: auto;
+}
 .linepage .card {
-  flex: 1 1 200px; max-width: 280px; box-sizing: border-box;
+  flex: 1 1 200px; max-width: 280px; box-sizing: border-box; height: var(--card-h);
   display: flex; flex-direction: column; gap: 6px; padding: 0 0 10px;
   border: 1px solid var(--ink); background: var(--paper);
 }
@@ -132,7 +137,7 @@
   position: relative; margin-bottom: 8px;
   display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: start;
   padding: 14px 18px; background: var(--paper); border: 2px solid var(--ink);
-  box-sizing: border-box; min-height: 110px; /* 有选项的对话放得下，换成别的话时框不变高，数轴不跳 */
+  box-sizing: border-box; height: 136px; /* 两行话加一排选项放得下；固定高，换成别的话时数轴不跳。不能 overflow，会把尖角剪掉 */
 }
 /* 没人说话时也留着这块地方，只是看不见，数轴才不会一会儿上一会儿下 */
 .linepage .talk[hidden] { display: grid; visibility: hidden; }

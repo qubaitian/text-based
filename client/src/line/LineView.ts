@@ -35,6 +35,7 @@ const MARGIN = 1.5; // 最外面的人再往外多画几米，好点到外面去
 const MIN_HALF = 3; // 数轴至少画到原点两边各几米
 const LABEL_H = 26; // 一个名字框的高
 const ROW_H = 34; // 名字框一层的高（名字挤在一起时往上叠）
+const LEVELS = 3; // 名字框固定留 3 层的高，叠的层数变了数轴也不上下动
 const ARROW = 22; // 最下面一层名字框到数轴的箭头长
 const BELOW = 60; // 数轴下面写刻度和目标坐标的地方
 
@@ -370,8 +371,7 @@ export class LineView {
       ends[level] = left + w;
       return { u, w, at, left, level };
     });
-    const levels = Math.max(1, ends.length);
-    const y0 = (levels - 1) * ROW_H + LABEL_H + ARROW; // 数轴的高度
+    const y0 = (LEVELS - 1) * ROW_H + LABEL_H + ARROW; // 数轴的高度
     const H = y0 + BELOW;
     this.y0 = y0;
 
