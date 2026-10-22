@@ -34,7 +34,6 @@
 .linepage .card .name { font-size: 20px; font-weight: 900; letter-spacing: 0.1em; }
 .linepage .card.mine .name { text-decoration: underline; text-underline-offset: 4px; }
 .linepage .card .dist { font-variant-numeric: tabular-nums; }
-.linepage .card .addr { font-size: 13px; }
 .linepage .card.talker { cursor: pointer; }
 .linepage .card.talker:hover { outline: 2px solid var(--ink); }
 .linepage .card .row { display: grid; grid-template-columns: 2.5em 1fr auto; gap: 8px; align-items: center; font-size: 14px; }

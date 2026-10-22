@@ -78,7 +78,7 @@ export class LineView {
 
   constructor(
     parent: HTMLElement,
-    private readonly address: string | null, // 登录的钱包地址，游客是 null
+    address: string | null, // 登录的钱包地址，游客是 null，只在系统框里显示
     private readonly send: (msg: object) => void,
     private readonly logout: () => void,
   ) {
@@ -233,7 +233,6 @@ export class LineView {
       this.cardKey = key;
       this.cards.innerHTML = list.map((u) => `<div class="card ${u.side}${u === me ? ' mine' : ''}" data-card="${u.id}">
         <div class="head"><span class="name">${u.name}</span><span class="dist"></span></div>
-        ${u.player ? `<div class="addr">${this.address ? short(this.address) : '游客'}</div>` : ''}
         ${(['hp', 'mp', 'sp', 'cd'] as const).map((k) => `<div class="row" data-k="${k}">
           <span>${{ hp: '血', mp: '内力', sp: '脚力', cd: '冷却' }[k]}</span><div class="bar"><i></i></div><span class="num"></span></div>`).join('')}
         <div class="buffs"></div>
