@@ -106,6 +106,14 @@
 .linepage .axis .label.foe text { fill: var(--paper); }
 .linepage .axis .label.mine text { text-decoration: underline; }
 .linepage .axis .label.talker { cursor: pointer; }
+/* 看不见的人：贴在数轴两头，虚线框 */
+.linepage .axis .label.off rect { stroke-dasharray: 4 3; }
+.linepage .axis .label.off text { font-weight: 400; }
+/* 自己脚下的出招范围：一段淡斜线，两头竖线 */
+.linepage .axis .reach { fill: url(#hatch); opacity: 0.35; }
+.linepage .axis .reachedge { stroke: var(--ink); stroke-width: 1.5; }
+/* 地面上的景物：很淡，压在最下面，不挡鼠标 */
+.linepage .axis .deco { fill: var(--ink); opacity: 0.12; pointer-events: none; }
 .linepage .axis .arrow { stroke: var(--ink); stroke-width: 1.5; }
 
 /* ---- 动作栏：紧跟在数轴下面，移动和武学在左，系统在右。武学多了就往下换行 ---- */

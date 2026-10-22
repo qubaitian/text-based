@@ -1,7 +1,7 @@
 import './line.css';
 import { changeMap } from './ink';
 import {
-  SKILLS, inCombat, lessonOf, round, talkOf, targetsOf, unitOf, walkLeft,
+  SKILLS, SPEED, SP_PER_M, TALK_REACH, inCombat, lessonOf, round, talkOf, targetsOf, unitOf, walkLeft,
   type Board, type Hit, type SkillId, type Unit,
 } from '../../../shared/line.ts';
 
@@ -38,6 +38,34 @@ const ROW_H = 34; // 名字框一层的高（名字挤在一起时往上叠）
 const LEVELS = 3; // 名字框固定留 3 层的高，叠的层数变了数轴也不上下动
 const ARROW = 22; // 最下面一层名字框到数轴的箭头长
 const BELOW = 60; // 数轴下面写刻度和目标坐标的地方
+const VIEW_HALF = 5; // 战斗外只看自己两边各几米，比例不变；看不见的人在数轴两头提示
+const ZOOM = 400; // 进出战斗时视野慢慢变过去，要多久（毫秒）
+const BAND = 14; // 自己脚下出招范围那一段斜线的高
+
+// ---- 地面上的景物：钉在地图上，自己走的时候从脚下滑过去，一看就知道在动 ----
+const DECO_STEP = 0.5; // 每隔这么多米可能有一个景物
+// 每个景物的样子：底边中间在 (0, 0)，往上画，最宽 ±16 像素
+const DECO: Record<string, string> = {
+  pine: 'M-2 0 V-10 H2 V0 Z M-16 -10 L0 -30 L16 -10 Z M-12 -22 L0 -44 L12 -22 Z',
+  rock: 'M-14 0 Q-12 -12 -2 -13 Q10 -14 14 0 Z',
+  grass: 'M-7 0 L-9 -11 L-5 0 Z M-1 0 L0 -14 L1 0 Z M5 0 L9 -11 L7 0 Z',
+  post: 'M-3 0 V-30 H3 V0 Z M-9 -23 H9 V-20 H-9 Z',
+  steps: 'M-16 0 V-5 H-6 V-10 H6 V-15 H16 V0 Z',
+};
+const SCENERY: Record<string, string[]> = {
+  武当山: ['pine', 'pine', 'rock', 'grass', 'steps'],
+  教学关: ['post', 'grass', 'grass', 'rock'],
+};
+
+/** 这张地图第 k 个格子放什么，没有就是 null。同一张地图、同一个格子永远一样 */
+function decoAt(place: string, k: number) {
+  let h = 2166136261;
+  for (const c of `${place}${k}`) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  h = Math.imul(h ^ (h >>> 13), 2246822507) >>> 0;
+  if (h % 100 >= 40) return null;
+  const list = SCENERY[place] ?? ['grass', 'rock'];
+  return list[(h >>> 8) % list.length];
+}
 
 const meters = (n: number) => `${n.toFixed(2)} 米`;
 
@@ -70,6 +98,11 @@ export class LineView {
   private talkKey = ''; // 上次画对话框时的内容，没变就不重画
   private origin = 0; // 原点在系统里的位置：永远是自己站的地方
   private center = 0; // 屏幕中间在系统里的位置：战斗中是最左和最右两个人的中点，战斗外是自己
+  private half = MIN_HALF; // 屏幕中间到一头有几米
+  private zoom: { c: number; h: number; at: number } | null = null; // 进出战斗时视野从哪里开始变，什么时候开始
+  private zoomFight: boolean | null = null; // 上次画数轴时是不是战斗中
+  private zoomBoard = ''; // 上次画的是哪张地图：换了地图不慢慢变
+  private raf = 0; // 视野还在变，下一帧要再画
   private scale = 1; // 一米多少像素
   private width = 0; // 数轴区域的宽
   private y0 = 0; // 数轴画在数轴区域里多高的地方
@@ -193,6 +226,7 @@ export class LineView {
 
   remove() {
     this.root.remove();
+    cancelAnimationFrame(this.raf);
     window.removeEventListener('keydown', this.onKey);
   }
 
@@ -339,7 +373,8 @@ export class LineView {
   }
 
   // ---- 下面的数轴：名字加箭头指着位置。自己永远是原点。
-  //      屏幕中间：战斗中是最左和最右两个人的中点，大家都看得到；战斗外是自己，走到哪里都在中间 ----
+  //      屏幕中间：战斗中是最左和最右两个人的中点，大家都看得到；战斗外是自己，走到哪里都在中间，
+  //      只看两边各 VIEW_HALF 米，看不见的人在两头写名字和距离 ----
 
   private renderAxis(b: Board) {
     const xs = b.units.map((u) => u.x);
@@ -348,28 +383,63 @@ export class LineView {
       return;
     }
     const me = unitOf(b);
-    this.center = me && !inCombat(b) ? me.x : (Math.min(...xs) + Math.max(...xs)) / 2;
-    this.origin = me ? me.x : this.center;
-    // 要放进来的点：所有人，还有自己正要走去的地方。half 是屏幕中间到一头有几米
-    const far = Math.max(...xs.map((x) => Math.abs(x - this.center)), me?.to != null ? Math.abs(me.to - this.center) : 0);
-    const half = Math.max(MIN_HALF, far + MARGIN);
+    const fight = inCombat(b);
+    let center: number, half: number;
+    if (me && !fight) {
+      center = me.x;
+      half = VIEW_HALF;
+    } else {
+      // 要放进来的点：所有人，还有自己正要走去的地方
+      center = (Math.min(...xs) + Math.max(...xs)) / 2;
+      const far = Math.max(...xs.map((x) => Math.abs(x - center)), me?.to != null ? Math.abs(me.to - center) : 0);
+      half = Math.max(MIN_HALF, far + MARGIN);
+    }
+    // 进出战斗时，从原来的视野慢慢变过去；换了地图就直接换
+    if (this.zoomBoard === b.id && this.zoomFight !== null && this.zoomFight !== fight)
+      this.zoom = { c: this.center, h: this.half, at: performance.now() };
+    if (this.zoomBoard !== b.id) this.zoom = null;
+    this.zoomFight = fight;
+    this.zoomBoard = b.id;
+    if (this.zoom) {
+      const f = (performance.now() - this.zoom.at) / ZOOM;
+      if (f >= 1) this.zoom = null;
+      else {
+        const e = 1 - (1 - f) ** 3;
+        center = this.zoom.c + (center - this.zoom.c) * e;
+        half = this.zoom.h + (half - this.zoom.h) * e;
+        this.raf ||= requestAnimationFrame(() => {
+          this.raf = 0;
+          this.render();
+        });
+      }
+    }
+    this.center = center;
+    this.half = half;
+    this.origin = me ? me.x : center;
     this.width = this.axis.clientWidth;
     const W = this.width;
     this.scale = (W - 2 * PAD) / (2 * half);
     // 离原点 r 米的地方在屏幕上的横坐标
-    const px = (r: number) => W / 2 + (this.origin + r - this.center) * this.scale;
+    const px = (r: number) => W / 2 + (this.origin + r - center) * this.scale;
     const rel = (x: number) => x - this.origin;
+    // 数轴那条线两头的横坐标，出了这两头就算看不见
+    const L = PAD / 2, R = W - PAD / 2;
+    const clamp = (x: number, m: number) => Math.max(m, Math.min(W - m, x));
 
-    // 名字框按位置从左到右排，和左边的挤在一起就往上放一层
+    // 名字框按位置从左到右排，和左边的挤在一起就往上放一层。
+    // 看不见的人贴在数轴那一头，写上方向和离自己几米，虚线框，没有箭头
     const ends: number[] = []; // 每一层最右边的名字框到哪里了
     const labels = [...b.units].sort((p, q) => p.x - q.x).map((u) => {
-      const w = labelW(u.name);
       const at = px(rel(u.x));
-      const left = Math.max(0, Math.min(W - w, at - w / 2));
+      const off = at < L ? -1 : at > R ? 1 : 0;
+      const d = me ? `${Math.abs(u.x - me.x).toFixed(1)} 米` : '';
+      const text = off < 0 ? `‹ ${u.name} ${d}` : off > 0 ? `${u.name} ${d} ›` : u.name;
+      const w = labelW(u.name) + (off ? (d.length + 2) * 8 : 0);
+      const left = off < 0 ? 0 : off > 0 ? W - w : clamp(at - w / 2, w / 2) - w / 2;
       let level = ends.findIndex((end) => end + 6 <= left);
       if (level < 0) level = ends.push(0) - 1;
       ends[level] = left + w;
-      return { u, w, at, left, level };
+      return { u, w, at, off, text, left, level };
     });
     const y0 = (LEVELS - 1) * ROW_H + LABEL_H + ARROW; // 数轴的高度
     const H = y0 + BELOW;
@@ -377,13 +447,32 @@ export class LineView {
 
     let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
       <defs><marker id="tip" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-        <path d="M0 0 L10 5 L0 10 z" fill="#000"/></marker></defs>
-      <line class="axisline" x1="${PAD / 2}" y1="${y0}" x2="${W - PAD / 2}" y2="${y0}" marker-end="url(#tip)" marker-start="url(#tip)"/>`;
+        <path d="M0 0 L10 5 L0 10 z" fill="#000"/></marker>
+        <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="6" stroke="#000" stroke-width="1.5"/></pattern></defs>`;
+
+    // 地面上的景物：最先画，压在最下面。一米太窄时跟着缩小，免得挤成一团
+    const size = Math.min(1, this.scale / 80);
+    for (let k = Math.ceil((center - half) / DECO_STEP); k * DECO_STEP <= center + half; k++) {
+      const d = decoAt(b.place, k);
+      if (d) svg += `<path class="deco" transform="translate(${W / 2 + (k * DECO_STEP - center) * this.scale} ${y0}) scale(${size})" d="${DECO[d]}"/>`;
+    }
+
+    // 出招范围：自己两边一段斜线，敌人站进来就打得到；战斗外是说话的距离
+    if (me) {
+      const reach = this.mode !== 'move' ? SKILLS[this.mode].reach : fight ? SKILLS.quan.reach : TALK_REACH;
+      const a = px(-reach), z = px(reach);
+      svg += `<rect class="reach" x="${a}" y="${y0 - BAND}" width="${z - a}" height="${BAND}"/>
+        <line class="reachedge" x1="${a}" y1="${y0 - BAND}" x2="${a}" y2="${y0}"/>
+        <line class="reachedge" x1="${z}" y1="${y0 - BAND}" x2="${z}" y2="${y0}"/>`;
+    }
+
+    svg += `<line class="axisline" x1="${L}" y1="${y0}" x2="${R}" y2="${y0}" marker-end="url(#tip)" marker-start="url(#tip)"/>`;
 
     // 刻度：每 step 米一个长刻度写数字；一米够宽时，每 0.1 米一个短刻度。数字都是离自己的距离，左边也不写负号
     const step = tickStep(this.scale);
     // 屏幕两头离原点几米
-    const lo = this.center - half - this.origin, hi = this.center + half - this.origin;
+    const lo = center - half - this.origin, hi = center + half - this.origin;
     if (this.scale * 0.1 >= 6) for (let k = Math.ceil(lo * 10); k <= hi * 10; k++)
       svg += `<line class="minor" x1="${px(k / 10)}" y1="${y0}" x2="${px(k / 10)}" y2="${y0 + 4}"/>`;
     for (let k = Math.ceil(lo / step); k * step <= hi; k++) {
@@ -395,33 +484,34 @@ export class LineView {
     // 单位写在右头箭头的上面，免得和最右边的刻度数字挤在一起
     svg += `<text class="unit" x="${W - PAD / 2}" y="${y0 - 10}">米</text>`;
 
-    // 自己正要走去的地方：数轴上一个空心三角，从自己画一条虚线过去，刻度下面写还要走几米，边走边变小
+    // 自己正要走去的地方：数轴上一个空心三角，从自己画一条虚线过去，刻度下面写还要走几米、几秒，边走边变小。
+    // 目标在屏幕外面（比如去找看不见的人说话），虚线画到数轴那一头，不画三角
     if (me && me.to !== null) {
       const a = px(rel(me.x)), t = px(rel(me.to));
-      svg += `<line class="route" x1="${a}" y1="${y0 - 5}" x2="${t}" y2="${y0 - 5}"/>
-        <path class="goal" d="M${t} ${y0 + 2} l-6 10 h12 z"/>
-        <text class="goaltext" x="${t}" y="${y0 + 46}">目标 ${Math.abs(rel(me.to)).toFixed(2)} 米</text>`;
+      svg += `<line class="route" x1="${a}" y1="${y0 - 5}" x2="${Math.max(L, Math.min(R, t))}" y2="${y0 - 5}"/>`;
+      if (t >= L && t <= R) svg += `<path class="goal" d="M${t} ${y0 + 2} l-6 10 h12 z"/>
+        <text class="goaltext" x="${clamp(t, 100)}" y="${y0 + 46}">目标 ${Math.abs(rel(me.to)).toFixed(2)} 米 · ${walkLeft(b, me).toFixed(1)} 秒</text>`;
     }
 
-    // 鼠标指着的地方：和走路的目标一样，一个空心三角，刻度下面写离自己几米。
+    // 鼠标指着的地方：和走路的目标一样，一个空心三角，刻度下面写离自己几米、走过去要几秒、扣多少脚力。
     // 走路时把它清掉：自己在动，鼠标没动，这个数马上就不对了。停下以后也不画，等鼠标再动一下才画
     if (me?.to != null) this.hover = null;
     if (this.mode === 'move' && this.hover !== null && this.hover >= lo && this.hover <= hi) {
-      const h = px(this.hover);
+      const h = px(this.hover), d = Math.abs(this.hover);
       svg += `<g class="ghost${this.canMove() ? '' : ' off'}"><path class="goal" d="M${h} ${y0 + 2} l-6 10 h12 z"/>
-        <text class="goaltext" x="${h}" y="${y0 + 46}">${Math.abs(this.hover).toFixed(1)} 米</text></g>`;
+        <text class="goaltext" x="${clamp(h, 100)}" y="${y0 + 46}">${d.toFixed(1)} 米 · ${(d / SPEED).toFixed(1)} 秒 · 脚力 -${(d * SP_PER_M).toFixed(1)}</text></g>`;
     }
 
     // 名字框和箭头：框底到数轴的箭头，叠在上层的箭头长一些。先画全部箭头，再画框，箭头穿过下层时被框盖住
     const top = (level: number) => y0 - ARROW - LABEL_H - level * ROW_H;
-    for (const { at, level } of labels)
-      svg += `<line class="arrow" x1="${at}" y1="${top(level) + LABEL_H}" x2="${at}" y2="${y0 - 1}" marker-end="url(#tip)"/>`;
-    for (const { u, w, left, level } of labels) {
-      const cls = ['label', u.side, u === me ? 'mine' : '', talkOf(b, u.id) && !b.talking ? 'talker' : '',
+    for (const { at, off, level } of labels)
+      if (!off) svg += `<line class="arrow" x1="${at}" y1="${top(level) + LABEL_H}" x2="${at}" y2="${y0 - 1}" marker-end="url(#tip)"/>`;
+    for (const { u, w, off, text, left, level } of labels) {
+      const cls = ['label', u.side, u === me ? 'mine' : '', off ? 'off' : '', talkOf(b, u.id) && !b.talking ? 'talker' : '',
         this.flashing(u.id) ? 'inv' : ''].join(' ');
       svg += `<g class="${cls}" data-id="${u.id}">
         <rect x="${left}" y="${top(level)}" width="${w}" height="${LABEL_H}"/>
-        <text x="${left + w / 2}" y="${top(level) + LABEL_H / 2 + 5}">${u.name}</text>
+        <text x="${left + w / 2}" y="${top(level) + LABEL_H / 2 + 5}">${text}</text>
       </g>`;
     }
 
