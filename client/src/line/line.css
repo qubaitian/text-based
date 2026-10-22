@@ -1,0 +1,110 @@
+/* 游戏页面：只用黑白。上面一排卡片，中间一行时间，下面数轴，最下面动作栏 */
+.linepage {
+  --ink: #000;
+  --paper: #fff;
+  position: relative; min-height: 100%; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 16px 16px 180px; /* 下面留出动作栏和对话框的地方 */
+  background: var(--paper); color: var(--ink);
+}
+.linepage button {
+  font: inherit; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--ink); border-radius: 0; cursor: pointer;
+}
+.linepage button:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+.linepage button:disabled { opacity: 0.35; cursor: default; }
+
+/* ---- 卡片：一人一张。敌人的名字栏黑底白字，自己的名字加下划线 ---- */
+.linepage .cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.linepage .card {
+  flex: 1 1 200px; max-width: 280px; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 6px; padding: 0 0 10px;
+  border: 1px solid var(--ink);
+}
+.linepage .card > *:not(.head) { margin: 0 10px; }
+.linepage .card .head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 6px 10px; border-bottom: 1px solid var(--ink);
+}
+.linepage .card.foe .head { background: var(--ink); color: var(--paper); }
+.linepage .card .name { font-size: 20px; font-weight: 900; letter-spacing: 0.1em; }
+.linepage .card.mine .name { text-decoration: underline; text-underline-offset: 4px; }
+.linepage .card .dist { font-variant-numeric: tabular-nums; }
+.linepage .card .addr { font-size: 13px; }
+.linepage .card.talker { cursor: pointer; }
+.linepage .card.talker:hover { outline: 2px solid var(--ink); }
+.linepage .card .row { display: grid; grid-template-columns: 2.5em 1fr auto; gap: 8px; align-items: center; font-size: 14px; }
+.linepage .card .bar { height: 10px; border: 1px solid var(--ink); }
+.linepage .card .bar i { display: block; height: 100%; background: var(--ink); }
+.linepage .card .num { min-width: 5.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.linepage .card .buffs { display: flex; flex-wrap: wrap; gap: 4px; }
+.linepage .card .buffs:empty { display: none; }
+.linepage .card .buffs span { padding: 1px 6px; font-size: 13px; border: 1px solid var(--ink); }
+.linepage .card .buffs .bad { background: var(--ink); color: var(--paper); }
+
+.linepage .status { font-size: 15px; font-variant-numeric: tabular-nums; }
+
+/* ---- 数轴：名字框、箭头、刻度。敌人的名字框黑底白字 ---- */
+.linepage .axis { position: relative; user-select: none; cursor: crosshair; }
+.linepage .axis svg { display: block; overflow: visible; }
+.linepage .axis .axisline { stroke: var(--ink); stroke-width: 1.5; }
+.linepage .axis .major { stroke: var(--ink); stroke-width: 1.5; }
+.linepage .axis .major.zero { stroke-width: 2.5; }
+.linepage .axis .minor { stroke: var(--ink); stroke-width: 1; }
+.linepage .axis text { font: inherit; font-size: 14px; text-anchor: middle; fill: var(--ink); font-variant-numeric: tabular-nums; }
+.linepage .axis .tick.zero { font-weight: 900; }
+.linepage .axis .unit { text-anchor: end; }
+.linepage .axis .route { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.linepage .axis .goal { fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; }
+.linepage .axis .goaltext { font-weight: 700; }
+.linepage .axis .ghost line { stroke: var(--ink); stroke-dasharray: 2 3; }
+.linepage .axis .ghost.off { opacity: 0.3; }
+.linepage .axis .label rect { fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; }
+.linepage .axis .label text { font-size: 15px; font-weight: 700; }
+.linepage .axis .label.foe rect { fill: var(--ink); }
+.linepage .axis .label.foe text { fill: var(--paper); }
+.linepage .axis .label.mine text { text-decoration: underline; }
+.linepage .axis .label.talker { cursor: pointer; }
+.linepage .axis .arrow { stroke: var(--ink); stroke-width: 1.5; }
+
+/* ---- 动作栏：屏幕最下面，武学在左，系统在右 ---- */
+.linepage .actions {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4;
+  display: flex; gap: 10px; padding: 12px 16px;
+  background: var(--paper); border-top: 1px solid var(--ink);
+}
+.linepage .actions button { min-width: 72px; padding: 10px 18px; font-size: 20px; letter-spacing: 0.1em; }
+.linepage .actions button[hidden] { display: none; }
+.linepage .actions .system { margin-left: auto; min-width: 0; }
+
+/* ---- 对话框：屏幕下方，盖住动作栏，系统按钮还露在右边 ---- */
+.linepage .talk {
+  position: fixed; left: 16px; right: 110px; bottom: 10px; z-index: 6;
+  display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: start;
+  padding: 14px 18px; background: var(--paper); border: 2px solid var(--ink);
+}
+.linepage .talk[hidden] { display: none; }
+/* 没有选项的话（师傅教的）放在动作栏上面，不盖住按钮 */
+.linepage .talk.hint { bottom: 82px; right: 16px; }
+.linepage .talk.hint .who { grid-row: auto; }
+.linepage .talk.hint .options { display: none; }
+.linepage .talk .who { grid-row: span 2; font-size: 20px; font-weight: 900; letter-spacing: 0.1em; padding-right: 16px; border-right: 1px solid var(--ink); }
+.linepage .talk .said { font-size: 18px; line-height: 1.5; }
+.linepage .talk .options { display: flex; gap: 10px; flex-wrap: wrap; }
+.linepage .talk .options button { font-size: 17px; letter-spacing: 0.1em; padding: 8px 18px; }
+
+/* ---- 系统框：屏幕中间，后面的游戏变暗 ---- */
+.linepage .sysmask {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+.linepage .sysmask[hidden] { display: none; }
+.linepage .sysbox {
+  width: min(320px, calc(100% - 32px)); box-sizing: border-box; padding: 20px 24px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--paper); border: 2px solid var(--ink);
+}
+.linepage .sysbox h2 { margin: 0; text-align: center; font-size: 22px; letter-spacing: 0.3em; }
+.linepage .sysbox .who { margin: 0 0 6px; text-align: center; font-size: 14px; }
+.linepage .sysbox button { font-size: 18px; letter-spacing: 0.1em; padding: 10px; }

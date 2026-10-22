@@ -1,0 +1,13 @@
+{
+  "name": "text-based",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w client",
+    "build": "npm run build -w client",
+    "typecheck": "npm run typecheck -w client && npm run typecheck -w server"
+  }
+}
