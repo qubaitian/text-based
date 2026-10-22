@@ -8,7 +8,7 @@ export const SPEED = 1; // 走路速度：米/秒，所有人一样
 export const SP_PER_M = 1; // 每走 1 米扣多少脚力
 export const SP_REGEN = 10; // 没在走的时候，每秒回多少脚力
 export const TALK_REACH = 1; // 离人这么多米以内就能说话
-export const START_SPREAD = 1.5; // 开局每人随机一个冷却，在 0 到这么多秒之间
+export const START_SPREAD = 1.5; // 进入战斗时每人随机一个冷却，在 0 到这么多秒之间
 export const NPC_WAIT = 1; // 师傅和木桩还不会行动，冷却到 0 时原地等这么久
 export const FOE_GAP = 0.2; // 和敌人至少隔这么多米，走到这么近就自动停
 
@@ -46,6 +46,7 @@ export interface Board {
   talkTo: string | null; // 走到这个人身边就和他说话
   talking: string | null; // 正在和谁说话，页面据此弹出对话框
   hit: Hit | null; // 最近一次出招，页面看到 n 变了就播一次攻击效果
+  fighting: boolean; // 上一次推进时间时是不是战斗中，用来认出“刚进入战斗”
 }
 
 /** 一次出招：谁打谁、打在哪里、扣多少血。目标打坏了会从地图上拿掉，所以要记下他当时的位置 */
@@ -101,14 +102,21 @@ export function createTutorial(): Board {
     unit('muzhuang1', '木桩甲', 'foe', false, 4, 300),
     unit('muzhuang2', '木桩乙', 'foe', false, 4.6, 300),
   ];
-  // 开局每人随机一个 0 到 1.5 秒的冷却，互相不一样，这样谁先谁后是随机的
+  // 冷却先都是 0，第一次推进时间时认出“进入战斗”，再随机分
+  return {
+    id: Math.random().toString(36).slice(2), units, time: 0, lesson: 0,
+    talkTo: null, talking: null, hit: null, fighting: false,
+  };
+}
+
+/** 进入战斗：每人随机一个 0 到 1.5 秒的冷却，互相不一样，这样谁先谁后是随机的 */
+function startFight(b: Board) {
   const used = new Set<number>();
-  for (const u of units) {
+  for (const u of b.units) {
     do u.cd = Math.round(Math.random() * START_SPREAD * 1000) / 1000;
     while (used.has(u.cd));
     used.add(u.cd);
   }
-  return { id: Math.random().toString(36).slice(2), units, time: 0, lesson: 0, talkTo: null, talking: null, hit: null };
 }
 
 export const unitOf = (b: Board) => b.units.find((u) => u.player);
@@ -210,10 +218,27 @@ export function talk(b: Board, id: string): boolean {
   return true;
 }
 
+/** 还要走几秒才停下：走到目标、走到离敌人 0.2 米、或者脚力用完，哪个先到算哪个。没在走就是 0。
+ *  冷却条拿它先把走路要花的时间画出来；被打断了就不再走，下一 tick 冷却条自然跟着变 */
+export function walkLeft(b: Board, u: Unit): number {
+  if (u.to === null) return 0;
+  const dir = Math.sign(u.to - u.x);
+  let end = u.to;
+  for (const v of b.units) {
+    const stop = v.x - dir * FOE_GAP;
+    if (v.side === u.side || dir * (v.x - u.x) <= 0 || dir * (end - stop) <= 0) continue;
+    end = dir * (u.x - stop) > 0 ? u.x : stop;
+  }
+  return round(Math.min(Math.abs(end - u.x), u.sp / SP_PER_M) / SPEED);
+}
+
 /** 推进时间。玩家不在线、或者在等玩家，就不动；否则所有人一起走路、减冷却 */
 export function step(b: Board, dt: number, online: boolean) {
   if (!online) return;
-  if (!inCombat(b)) for (const u of b.units) u.cd = 0;
+  const fight = inCombat(b);
+  if (fight && !b.fighting) startFight(b);
+  b.fighting = fight;
+  if (!fight) for (const u of b.units) u.cd = 0;
   else {
     for (const u of b.units) if (!u.player && u.cd === 0) u.cd = NPC_WAIT;
     if (waiting(b)) return;

@@ -1,7 +1,7 @@
 import './line.css';
 import {
-  SKILLS, inCombat, lessonOf, round, talkOf, targetsOf, unitOf,
-  type Board, type Hit, type SkillId,
+  SKILLS, inCombat, lessonOf, round, talkOf, targetsOf, unitOf, walkLeft,
+  type Board, type Hit, type SkillId, type Unit,
 } from '../../../shared/line.ts';
 
 // 每种状态是好是坏：坏的黑底白字，好的白底黑框
@@ -10,7 +10,13 @@ const KIND: Record<string, 'good' | 'bad'> = {
   护体: 'good', 铁甲: 'good', 狂暴: 'good', 醉酒: 'good', 加速: 'good', 疗伤: 'good',
 };
 
-const CD_FULL = 3; // 冷却条满格是几秒，超过的也画满
+const CD_FULL = 3; // 冷却条满格是几秒，超过的也画满；右边的冷却条最上面也是这么多秒
+
+// ---- 右边的冷却条（像素） ----
+const TL_W = 160; // 冷却条的宽，和 line.css 里的一样
+const TL_PAD = 22; // 竖线上头留的空，写得下「3」
+const TRACK_X = TL_W / 2; // 竖线在正中间：我方的名字框在左边，敌人的在右边
+const CHIP_H = 22; // 名字框的高；挤在一起时往下错开，用一条短线连回真正的位置
 
 type Mode = 'move' | SkillId; // 动作栏上现在用的是哪个：移动，或者某个武学
 const MODES: Mode[] = ['move', 'quan'];
@@ -74,6 +80,7 @@ export class LineView {
   private readonly cards: HTMLElement;
   private readonly axis: HTMLElement;
   private readonly fx: SVGSVGElement; // 盖在数轴上的一层，只画攻击效果，不跟着每 tick 重画
+  private readonly timeline: HTMLElement;
   private readonly buttons = new Map<Mode, HTMLButtonElement>();
 
   constructor(
@@ -92,6 +99,7 @@ export class LineView {
         <marker id="fxtip" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto">
           <path d="M0 0 L10 5 L0 10 z" fill="#000"/></marker></defs></svg></div>
       <div class="actions"></div>
+      <div class="timeline"></div>
       <div class="sysmask" hidden><div class="sysbox">
         <h2>系统</h2>
         <p class="who">${address ? `钱包 ${short(address)}` : '游客'}</p>
@@ -103,6 +111,7 @@ export class LineView {
     this.cards = this.root.querySelector('.cards')!;
     this.axis = this.root.querySelector('.axis')!;
     this.fx = this.root.querySelector('.fx')!;
+    this.timeline = this.root.querySelector('.timeline')!;
 
     // 动作栏：移动和武学，当前用的那个反色。点武学就进去选目标，点移动就出来
     const bar = this.root.querySelector('.actions')!;
@@ -148,7 +157,9 @@ export class LineView {
       this.cardHover = null;
       this.render();
     });
-    new ResizeObserver(() => this.render()).observe(this.axis);
+    const resize = new ResizeObserver(() => this.render());
+    resize.observe(this.axis);
+    resize.observe(this.timeline);
   }
 
   /** 服务器发来新的数轴 */
@@ -221,6 +232,55 @@ export class LineView {
       if (id !== 'move') btn.disabled = !targetsOf(b, id).length;
     }
     this.renderTalk(b);
+    this.renderTimeline(b);
+  }
+
+  // ---- 右边的冷却条：所有人的冷却，从上往下 3s、1.5s、0。超过 3s 的停在最上面。我方在左，敌人在右。
+  //      在走路的人，按还要走几秒先画上去；被打断了就跟着变 ----
+
+  private renderTimeline(b: Board) {
+    const H = this.timeline.clientHeight;
+    // 0 和数轴一样高：数轴那条线在页面上的高度，换算到冷却条里
+    const axisY = this.axis.getBoundingClientRect().top + this.y0 - this.timeline.getBoundingClientRect().top;
+    const top = TL_PAD, bottom = Math.max(top + CHIP_H * 2, Math.min(H - TL_PAD, axisY));
+    const yOf = (cd: number) => top + (1 - Math.min(cd, CD_FULL) / CD_FULL) * (bottom - top);
+    let svg = `<svg width="${TL_W}" height="${H}"><line class="track" x1="${TRACK_X}" y1="${top}" x2="${TRACK_X}" y2="${bottom}"/>`;
+    // 秒数：3 在竖线上头外面，0 在下头外面，1.5 写在刻度左边，不压在线上
+    const label: [number, number, number][] = [
+      [CD_FULL, TRACK_X, yOf(CD_FULL) - 8], [CD_FULL / 2, TRACK_X - 16, yOf(CD_FULL / 2) + 5], [0, TRACK_X, yOf(0) + 18],
+    ];
+    for (const [t, x, y] of label)
+      svg += `<line class="tick" x1="${TRACK_X - 4}" y1="${yOf(t)}" x2="${TRACK_X + 4}" y2="${yOf(t)}"/>
+        <text class="sec" x="${x}" y="${y}">${t}</text>`;
+
+    // 名字框两边各排各的：从上往下，和上一个挤在一起就往下错开，到了底再从下往上推回来
+    const me = unitOf(b);
+    for (const side of ['friend', 'foe'] as const) {
+      const busy = (u: Unit) => (u.cd > 0 ? u.cd : walkLeft(b, u));
+      const list = b.units.filter((u) => u.side === side).sort((p, q) => busy(q) - busy(p));
+      const real = list.map((u) => yOf(busy(u)));
+      const ys = [...real];
+      for (let i = 1; i < ys.length; i++) ys[i] = Math.max(ys[i], ys[i - 1] + CHIP_H);
+      for (let i = ys.length - 1; i >= 0; i--) ys[i] = Math.min(ys[i], i === ys.length - 1 ? bottom : ys[i + 1] - CHIP_H);
+      // 我方的名字框靠最左，敌人的靠最右，再用短线连到竖线上
+      list.forEach((u, i) => {
+        // 走路这种要花一段时间的动作，超过 3 秒时名字框停在最上面，看不出还剩多久，就在名字后面写出来；
+        // 少于 3 秒，位置就能看出来，不写。冷却不写
+        const left = u.cd > 0 ? 0 : walkLeft(b, u);
+        const count = left > CD_FULL ? `${left.toFixed(1)}s` : '';
+        const w = u.name.length * 13 + (count ? 4 + count.length * 7 : 0) + 10;
+        const x = side === 'friend' ? 2 : TL_W - 2 - w;
+        const inner = side === 'friend' ? x + w : x; // 名字框靠竖线的那条边
+        const cls = ['chip', u.side, u === me ? 'mine' : ''].join(' ');
+        svg += `<g class="${cls}">
+          <line class="lead" x1="${inner}" y1="${ys[i]}" x2="${TRACK_X}" y2="${real[i]}"/>
+          <circle cx="${TRACK_X}" cy="${real[i]}" r="3"/>
+          <rect x="${x}" y="${ys[i] - CHIP_H / 2 + 1}" width="${w}" height="${CHIP_H - 2}"/>
+          <text x="${x + w / 2}" y="${ys[i] + 5}"><tspan class="who">${u.name}</tspan>${count ? `<tspan class="count" dx="4">${count}</tspan>` : ''}</text>
+        </g>`;
+      });
+    }
+    this.timeline.innerHTML = svg + '</svg>';
   }
 
   // ---- 上面的卡片：居中，从左到右和数轴上的顺序一样 ----
@@ -324,13 +384,13 @@ export class LineView {
         <text class="goaltext" x="${t}" y="${y0 + 46}">目标 ${Math.abs(rel(me.to)).toFixed(2)} 米</text>`;
     }
 
-    // 鼠标指着的地方：一条竖虚线，上面写离自己几米。走路时把它清掉：自己在动，鼠标没动，这个数马上就不对了。
-    // 停下以后也不画，等鼠标再动一下才画
+    // 鼠标指着的地方：和走路的目标一样，一个空心三角，刻度下面写离自己几米。
+    // 走路时把它清掉：自己在动，鼠标没动，这个数马上就不对了。停下以后也不画，等鼠标再动一下才画
     if (me?.to != null) this.hover = null;
     if (this.mode === 'move' && this.hover !== null && this.hover >= lo && this.hover <= hi) {
       const h = px(this.hover);
-      svg += `<g class="ghost${this.canMove() ? '' : ' off'}"><line x1="${h}" y1="${y0 - ARROW}" x2="${h}" y2="${y0 + 8}"/>
-        <text x="${h}" y="${y0 - ARROW - 4}">${Math.abs(this.hover).toFixed(1)} 米</text></g>`;
+      svg += `<g class="ghost${this.canMove() ? '' : ' off'}"><path class="goal" d="M${h} ${y0 + 2} l-6 10 h12 z"/>
+        <text class="goaltext" x="${h}" y="${y0 + 46}">${Math.abs(this.hover).toFixed(1)} 米</text></g>`;
     }
 
     // 名字框和箭头：框底到数轴的箭头，叠在上层的箭头长一些。先画全部箭头，再画框，箭头穿过下层时被框盖住
