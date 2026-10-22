@@ -25,7 +25,7 @@ type ClientMsg =
   | { t: 'siwe'; message: string; signature: Hex }
   | { t: 'guest' }
   | { t: 'move'; x: number }
-  | { t: 'act'; skill: SkillId }
+  | { t: 'act'; skill: SkillId; target: string }
   | { t: 'talk'; who: string }
   | { t: 'choose'; option: OptionId }
   | { t: 'reset' }
@@ -114,7 +114,7 @@ wss.on('connection', (ws, req) => {
     const acc = accounts.get(address)!;
     const b = acc.board;
     if (msg.t === 'move') move(b, Number(msg.x));
-    else if (msg.t === 'act' && Object.hasOwn(SKILLS, msg.skill)) act(b, msg.skill);
+    else if (msg.t === 'act' && Object.hasOwn(SKILLS, msg.skill)) act(b, msg.skill, String(msg.target));
     else if (msg.t === 'talk') talk(b, String(msg.who));
     else if (msg.t === 'choose') choose(b, msg.option);
     else if (msg.t === 'reset') acc.board = createTutorial();

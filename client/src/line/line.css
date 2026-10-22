@@ -4,7 +4,7 @@
   --paper: #fff;
   position: relative; min-height: 100%; box-sizing: border-box;
   display: flex; flex-direction: column; gap: 16px;
-  padding: 16px 16px 180px; /* 下面留出动作栏和对话框的地方 */
+  padding: 16px 16px 96px; /* 下面留出动作栏的地方 */
   background: var(--paper); color: var(--ink);
 }
 .linepage button {
@@ -13,14 +13,18 @@
 }
 .linepage button:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
 .linepage button:disabled { opacity: 0.35; cursor: default; }
+.linepage button.on { background: var(--ink); color: var(--paper); }
 
 /* ---- 卡片：一人一张。敌人的名字栏黑底白字，自己的名字加下划线 ---- */
 .linepage .cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .linepage .card {
   flex: 1 1 200px; max-width: 280px; box-sizing: border-box;
   display: flex; flex-direction: column; gap: 6px; padding: 0 0 10px;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--ink); background: var(--paper);
 }
+/* 被打中时反色闪两下；武学里箭头指着的敌人，卡片外面加一圈粗框 */
+.linepage .card.inv, .linepage .axis .label.inv { filter: invert(1); }
+.linepage .card.aimed { outline: 3px solid var(--ink); outline-offset: 2px; }
 .linepage .card > *:not(.head) { margin: 0 10px; }
 .linepage .card .head {
   display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
@@ -42,10 +46,13 @@
 .linepage .card .buffs span { padding: 1px 6px; font-size: 13px; border: 1px solid var(--ink); }
 .linepage .card .buffs .bad { background: var(--ink); color: var(--paper); }
 
-.linepage .status { font-size: 15px; font-variant-numeric: tabular-nums; }
 
 /* ---- 数轴：名字框、箭头、刻度。敌人的名字框黑底白字 ---- */
+.linepage .axiswrap { position: relative; }
 .linepage .axis { position: relative; user-select: none; cursor: crosshair; }
+.linepage .axis.aiming { cursor: pointer; }
+.linepage .axis .aim { fill: none; stroke: var(--ink); stroke-width: 2; }
+.linepage .axis .aimhalo { fill: none; stroke: var(--paper); stroke-width: 6; }
 .linepage .axis svg { display: block; overflow: visible; }
 .linepage .axis .axisline { stroke: var(--ink); stroke-width: 1.5; }
 .linepage .axis .major { stroke: var(--ink); stroke-width: 1.5; }
@@ -77,15 +84,21 @@
 .linepage .actions button[hidden] { display: none; }
 .linepage .actions .system { margin-left: auto; min-width: 0; }
 
-/* ---- 对话框：屏幕下方，盖住动作栏，系统按钮还露在右边 ---- */
+/* ---- 对话框：数轴上面，下边一个尖角指着说话的人。--tail 是尖角的横坐标 ---- */
 .linepage .talk {
-  position: fixed; left: 16px; right: 110px; bottom: 10px; z-index: 6;
+  position: relative; margin-bottom: 8px;
   display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: start;
   padding: 14px 18px; background: var(--paper); border: 2px solid var(--ink);
 }
 .linepage .talk[hidden] { display: none; }
-/* 没有选项的话（师傅教的）放在动作栏上面，不盖住按钮 */
-.linepage .talk.hint { bottom: 82px; right: 16px; }
+/* 尖角：黑的三角在外，白的三角压在里面，盖住框线，看起来是框伸出来的一角 */
+.linepage .talk::before, .linepage .talk::after {
+  content: ''; position: absolute; left: var(--tail, 50%); transform: translateX(-50%);
+  border-style: solid; border-color: transparent;
+}
+.linepage .talk::before { top: 100%; border-width: 14px 11px 0; border-top-color: var(--ink); }
+.linepage .talk::after { top: calc(100% - 2px); border-width: 11px 8px 0; border-top-color: var(--paper); }
+/* 没有选项的话（师傅教的）只有一行 */
 .linepage .talk.hint .who { grid-row: auto; }
 .linepage .talk.hint .options { display: none; }
 .linepage .talk .who { grid-row: span 2; font-size: 20px; font-weight: 900; letter-spacing: 0.1em; padding-right: 16px; border-right: 1px solid var(--ink); }
@@ -108,3 +121,17 @@
 .linepage .sysbox h2 { margin: 0; text-align: center; font-size: 22px; letter-spacing: 0.3em; }
 .linepage .sysbox .who { margin: 0 0 6px; text-align: center; font-size: 14px; }
 .linepage .sysbox button { font-size: 18px; letter-spacing: 0.1em; padding: 10px; }
+
+/* ---- 攻击效果：盖在数轴上，不挡鼠标 ---- */
+.linepage .fx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.linepage .fx .fxarc { fill: none; stroke: var(--ink); stroke-width: 5; }
+.linepage .fx .fxdot { fill: var(--ink); }
+.linepage .fx .fxdmg {
+  font: inherit; font-size: 22px; font-weight: 900; text-anchor: middle; fill: var(--ink);
+  paint-order: stroke; stroke: var(--paper); stroke-width: 5px;
+  transform-box: fill-box; animation: fxrise 0.9s ease-out forwards;
+}
+@keyframes fxrise {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-40px); opacity: 0; }
+}

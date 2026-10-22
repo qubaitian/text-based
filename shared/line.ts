@@ -16,7 +16,7 @@ export const FOE_GAP = 0.2; // 和敌人至少隔这么多米，走到这么近�
 export const round = (n: number) => Math.round(n * 1e6) / 1e6;
 
 /** 师傅一句一句教。走起来以后说第二句，木桩打坏以后说第三句 */
-export const LESSONS = ['点下面的数轴，走过去', '走到木桩 1 米以内，点「拳」打它', '过来和我聊聊'];
+export const LESSONS = ['点下面的数轴，走过去', '走到木桩 1 米以内，点「拳」，再点一下出招，把两个木桩都打坏', '过来和我聊聊'];
 export const TEACHER = 'shifu'; // 谁在对话框里教
 
 export type Side = 'friend' | 'foe';
@@ -45,17 +45,28 @@ export interface Board {
   lesson: number; // 师傅教到第几句，是 LESSONS 的下标；等于 LESSONS.length 就是教完了
   talkTo: string | null; // 走到这个人身边就和他说话
   talking: string | null; // 正在和谁说话，页面据此弹出对话框
+  hit: Hit | null; // 最近一次出招，页面看到 n 变了就播一次攻击效果
+}
+
+/** 一次出招：谁打谁、打在哪里、扣多少血。目标打坏了会从地图上拿掉，所以要记下他当时的位置 */
+export interface Hit {
+  n: number; // 第几次出招，从 1 开始
+  from: string;
+  to: string;
+  toX: number;
+  power: number;
 }
 
 /** 对话框里的一段话：谁说的、说什么、下面有哪些选项 */
 export interface Talk {
+  by: string; // 说话的人的 id，对话框的尖角指着他
   who: string;
   text: string;
   options: { id: OptionId; text: string }[];
 }
 export type OptionId = 'close';
 
-/** 武学：打离自己最近的、够得着的敌人 */
+/** 武学：打够得着的敌人里选中的一个 */
 export interface Skill {
   id: SkillId;
   name: string;
@@ -82,12 +93,13 @@ function unit(id: string, name: string, side: Side, player: boolean, x: number, 
   };
 }
 
-/** 教学关：徒弟走 3 米就能打到木桩，木桩三下打坏 */
+/** 教学关：两个木桩都不动，各三下打坏。徒弟停在木桩甲前面时，木桩乙也在 1 米以内，可以选打谁 */
 export function createTutorial(): Board {
   const units = [
     unit('tudi', '徒弟', 'friend', true, 0),
     unit(TEACHER, '师傅', 'friend', false, -2),
-    unit('muzhuang', '木桩', 'foe', false, 4, 300),
+    unit('muzhuang1', '木桩甲', 'foe', false, 4, 300),
+    unit('muzhuang2', '木桩乙', 'foe', false, 4.6, 300),
   ];
   // 开局每人随机一个 0 到 1.5 秒的冷却，互相不一样，这样谁先谁后是随机的
   const used = new Set<number>();
@@ -96,7 +108,7 @@ export function createTutorial(): Board {
     while (used.has(u.cd));
     used.add(u.cd);
   }
-  return { id: Math.random().toString(36).slice(2), units, time: 0, lesson: 0, talkTo: null, talking: null };
+  return { id: Math.random().toString(36).slice(2), units, time: 0, lesson: 0, talkTo: null, talking: null, hit: null };
 }
 
 export const unitOf = (b: Board) => b.units.find((u) => u.player);
@@ -135,24 +147,20 @@ export function move(b: Board, x: number): boolean {
   return true;
 }
 
-/** 这招现在能打谁：够得着的敌人里最近的一个。冷却不为 0 就谁都打不了 */
-export function targetOf(b: Board, skill: SkillId): Unit | null {
+/** 这招现在能打谁：够得着的敌人，从近到远。冷却不为 0 就谁都打不了 */
+export function targetsOf(b: Board, skill: SkillId): Unit[] {
   const u = unitOf(b), s = SKILLS[skill];
-  if (!u || !s || u.cd > 0 || b.talking) return null;
-  let best: Unit | null = null;
-  for (const v of b.units) {
-    if (v.side === u.side || dist(u, v) > s.reach) continue;
-    if (!best || dist(u, v) < dist(u, best)) best = v;
-  }
-  return best;
+  if (!u || !s || u.cd > 0 || b.talking) return [];
+  return b.units.filter((v) => v.side !== u.side && dist(u, v) <= s.reach).sort((p, q) => dist(u, p) - dist(u, q));
 }
 
-/** 出招。出招就停下脚步。不合法就什么都不做，返回 false */
-export function act(b: Board, skill: SkillId): boolean {
-  const v = targetOf(b, skill);
+/** 出招打 target。出招就停下脚步。打不到就什么都不做，返回 false */
+export function act(b: Board, skill: SkillId, target: string): boolean {
+  const v = targetsOf(b, skill).find((w) => w.id === target);
   if (!v) return false;
   const u = unitOf(b)!, s = SKILLS[skill];
   u.to = null;
+  b.hit = { n: (b.hit?.n ?? 0) + 1, from: u.id, to: v.id, toX: v.x, power: s.power };
   hurt(b, v, s.power);
   u.cd = s.cd;
   // 教学：敌人都打完了就叫徒弟过去聊聊
@@ -164,6 +172,7 @@ export function act(b: Board, skill: SkillId): boolean {
 export function talkOf(b: Board, id: string): Talk | null {
   if (inCombat(b)) return null;
   if (id === TEACHER) return {
+    by: TEACHER,
     who: '师傅',
     text: '木桩打得不错。走路、出招，山下的功夫就这两样，今天先教到这里。',
     options: [{ id: 'close', text: '好' }],
@@ -175,7 +184,7 @@ export function talkOf(b: Board, id: string): Talk | null {
 export function lessonOf(b: Board): Talk | null {
   const text = LESSONS[b.lesson];
   if (!text || b.talking || !b.units.some((u) => u.id === TEACHER)) return null;
-  return { who: '师傅', text, options: [] };
+  return { by: TEACHER, who: '师傅', text, options: [] };
 }
 
 /** 对话框里点了选项。只认现在有的选项。和师傅聊完，教学就结束了 */
