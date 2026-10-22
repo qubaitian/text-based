@@ -68,7 +68,7 @@ export class LineView {
   private cardKey = ''; // 上次排卡片时有哪些人，没变就只改数字，免得点卡片时卡片被换掉
   private talkKey = ''; // 上次画对话框时的内容，没变就不重画
   private origin = 0; // 原点在系统里的位置：永远是自己站的地方
-  private center = 0; // 屏幕中间在系统里的位置：最左和最右两个人的中点
+  private center = 0; // 屏幕中间在系统里的位置：战斗中是最左和最右两个人的中点，战斗外是自己
   private scale = 1; // 一米多少像素
   private width = 0; // 数轴区域的宽
   private y0 = 0; // 数轴画在数轴区域里多高的地方
@@ -337,7 +337,8 @@ export class LineView {
     }
   }
 
-  // ---- 下面的数轴：名字加箭头指着位置。自己永远是原点，屏幕中间是最左和最右两个人的中点 ----
+  // ---- 下面的数轴：名字加箭头指着位置。自己永远是原点。
+  //      屏幕中间：战斗中是最左和最右两个人的中点，大家都看得到；战斗外是自己，走到哪里都在中间 ----
 
   private renderAxis(b: Board) {
     const xs = b.units.map((u) => u.x);
@@ -346,7 +347,7 @@ export class LineView {
       return;
     }
     const me = unitOf(b);
-    this.center = (Math.min(...xs) + Math.max(...xs)) / 2;
+    this.center = me && !inCombat(b) ? me.x : (Math.min(...xs) + Math.max(...xs)) / 2;
     this.origin = me ? me.x : this.center;
     // 要放进来的点：所有人，还有自己正要走去的地方。half 是屏幕中间到一头有几米
     const far = Math.max(...xs.map((x) => Math.abs(x - this.center)), me?.to != null ? Math.abs(me.to - this.center) : 0);
