@@ -116,7 +116,7 @@ wss.on('connection', (ws, req) => {
     if (msg.t === 'move') move(b, Number(msg.x));
     else if (msg.t === 'act' && Object.hasOwn(SKILLS, msg.skill)) act(b, msg.skill, String(msg.target));
     else if (msg.t === 'talk') talk(b, String(msg.who));
-    else if (msg.t === 'choose') choose(b, msg.option);
+    else if (msg.t === 'choose') acc.board = choose(b, msg.option);
     else if (msg.t === 'reset') acc.board = createTutorial();
     else if (msg.t === 'logout') {
       // 作废 token，连接还留着，回到没登录的样子。游客退出后再也登不回去，账号直接删掉

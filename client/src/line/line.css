@@ -132,8 +132,10 @@
   position: relative; margin-bottom: 8px;
   display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: start;
   padding: 14px 18px; background: var(--paper); border: 2px solid var(--ink);
+  box-sizing: border-box; min-height: 110px; /* 有选项的对话放得下，换成别的话时框不变高，数轴不跳 */
 }
-.linepage .talk[hidden] { display: none; }
+/* 没人说话时也留着这块地方，只是看不见，数轴才不会一会儿上一会儿下 */
+.linepage .talk[hidden] { display: grid; visibility: hidden; }
 /* 尖角：黑的三角在外，白的三角压在里面，盖住框线，看起来是框伸出来的一角 */
 .linepage .talk::before, .linepage .talk::after {
   content: ''; position: absolute; left: var(--tail, 50%); transform: translateX(-50%);

@@ -18,6 +18,7 @@ export const round = (n: number) => Math.round(n * 1e6) / 1e6;
 /** 师傅一句一句教。走起来以后说第二句，木桩打坏以后说第三句 */
 export const LESSONS = ['点下面的数轴，走过去', '走到木桩 1 米以内，点「拳」，再确认目标，把两个木桩都打坏', '过来和我聊聊'];
 export const TEACHER = 'shifu'; // 谁在对话框里教
+export const ZHANG = 'zhang'; // 武当山上的张三丰
 
 export type Side = 'friend' | 'foe';
 
@@ -66,7 +67,7 @@ export interface Talk {
   text: string;
   options: { id: OptionId; text: string }[];
 }
-export type OptionId = 'close';
+export type OptionId = 'wudang' | 'close';
 
 /** 武学：打够得着的敌人里选中的一个 */
 export interface Skill {
@@ -118,6 +119,15 @@ function startFight(b: Board) {
     while (used.has(u.cd));
     used.add(u.cd);
   }
+}
+
+/** 武当山：只有徒弟和张三丰，没有敌人，一进来就是战斗外。教学已经结束 */
+export function createWudang(): Board {
+  return {
+    id: Math.random().toString(36).slice(2), place: '武当山',
+    units: [unit('tudi', '徒弟', 'friend', true, 0), unit(ZHANG, '张三丰', 'friend', false, 4)],
+    time: 0, lesson: LESSONS.length, talkTo: null, talking: null, hit: null, fighting: false,
+  };
 }
 
 export const unitOf = (b: Board) => b.units.find((u) => u.player);
@@ -183,9 +193,10 @@ export function talkOf(b: Board, id: string): Talk | null {
   if (id === TEACHER) return {
     by: TEACHER,
     who: '师傅',
-    text: '木桩打得不错。走路、出招，山下的功夫就这两样，今天先教到这里。',
-    options: [{ id: 'close', text: '好' }],
+    text: '木桩打得不错。走路、出招，山下的功夫就这两样，我教完了。去武当山看看吧。',
+    options: [{ id: 'wudang', text: '去武当山' }, { id: 'close', text: '再待会儿' }],
   };
+  if (id === ZHANG) return { by: ZHANG, who: '张三丰', text: '来了？先四处走走。', options: [{ id: 'close', text: '好' }] };
   return null;
 }
 
@@ -197,12 +208,15 @@ export function lessonOf(b: Board): Talk | null {
 }
 
 /** 对话框里点了选项。只认现在有的选项。和师傅聊完，教学就结束了 */
-export function choose(b: Board, option: OptionId): boolean {
+/** 对话框里点了选项，返回接下来用的地图：选了去武当山就是一张新地图，否则还是这张。
+ *  只认现在有的选项。和师傅聊完，教学就结束了 */
+export function choose(b: Board, option: OptionId): Board {
   const options = b.talking ? talkOf(b, b.talking)?.options ?? [] : [];
-  if (!options.some((o) => o.id === option)) return false;
+  if (!options.some((o) => o.id === option)) return b;
+  if (option === 'wudang') return createWudang();
   if (b.talking === TEACHER && b.lesson === LESSONS.length - 1) b.lesson = LESSONS.length;
   b.talking = null;
-  return true;
+  return b;
 }
 
 /** 战斗外点了人：够近就直接说话，不够近就先朝他走，走到 1 米以内再说 */
