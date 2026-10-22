@@ -4,7 +4,7 @@
   --paper: #fff;
   position: relative; min-height: 100%; box-sizing: border-box;
   display: flex; flex-direction: column; gap: 16px;
-  padding: 16px 16px 96px; /* 下面留出动作栏的地方 */
+  padding: 16px;
   background: var(--paper); color: var(--ink);
 }
 .linepage button {
@@ -73,11 +73,10 @@
 .linepage .axis .label.talker { cursor: pointer; }
 .linepage .axis .arrow { stroke: var(--ink); stroke-width: 1.5; }
 
-/* ---- 动作栏：屏幕最下面，武学在左，系统在右 ---- */
+/* ---- 动作栏：紧跟在数轴下面，移动和武学在左，系统在右。武学多了就往下换行 ---- */
 .linepage .actions {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4;
-  display: flex; gap: 10px; padding: 12px 16px;
-  background: var(--paper); border-top: 1px solid var(--ink);
+  display: flex; flex-wrap: wrap; gap: 10px; padding-top: 12px;
+  border-top: 1px solid var(--ink);
 }
 .linepage .actions button { min-width: 72px; padding: 10px 18px; font-size: 20px; letter-spacing: 0.1em; }
 .linepage .actions button[hidden] { display: none; }
