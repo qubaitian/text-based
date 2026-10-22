@@ -1,5 +1,5 @@
-/* 游戏页面：只用黑白。从上往下：卡片、对话框、数轴、动作栏。
-   冷却条在右边一列，只从对话框排到数轴，不高过对话框，也不低过动作栏 */
+/* 游戏页面：只用黑白。从上往下：卡片、数轴、对话框、动作栏。
+   冷却条在右边一列，从卡片排到数轴，0 和数轴一样高 */
 .linepage {
   --ink: #000;
   --paper: #fff;
@@ -8,12 +8,11 @@
   padding: 16px;
   background: var(--paper); color: var(--ink);
 }
-.linepage .cards, .linepage .actions { grid-column: 1 / -1; }
-.linepage .cards { grid-row: 1; }
-.linepage .talk { grid-row: 2; grid-column: 1; }
-.linepage .axiswrap { grid-row: 3; grid-column: 1; }
-.linepage .actions { grid-row: 4; }
-/* 水墨盖的地方：动作栏上面的整块，卡片、对话框、数轴、冷却条。平时是空的，点得穿 */
+.linepage .cards { grid-row: 1; grid-column: 1; }
+.linepage .axiswrap { grid-row: 2; grid-column: 1; }
+.linepage .talk { grid-row: 3; grid-column: 1; }
+.linepage .actions { grid-row: 4; grid-column: 1 / -1; }
+/* 水墨盖的地方：动作栏上面的整块，卡片、数轴、对话框、冷却条。平时是空的，点得穿 */
 .linepage .stage {
   grid-row: 1 / 4; grid-column: 1 / -1; margin: -16px -16px 0;
   position: relative; z-index: 5; overflow: hidden; pointer-events: none;
@@ -69,7 +68,6 @@
 .linepage .card.foe .head { background: var(--ink); color: var(--paper); }
 .linepage .card .name { font-size: 20px; font-weight: 900; letter-spacing: 0.1em; }
 .linepage .card.mine .name { text-decoration: underline; text-underline-offset: 4px; }
-.linepage .card .dist { font-variant-numeric: tabular-nums; }
 .linepage .card.talker { cursor: pointer; }
 .linepage .card.talker:hover { outline: 2px solid var(--ink); }
 .linepage .card .row { display: grid; grid-template-columns: 2.5em 1fr auto; gap: 8px; align-items: center; font-size: 14px; }
@@ -125,9 +123,9 @@
 .linepage .actions button[hidden] { display: none; }
 .linepage .actions .system { margin-left: auto; min-width: 0; }
 
-/* ---- 右边的冷却条：和对话框、数轴并排。敌人的名字框黑底白字 ---- */
-.linepage .timeline { grid-row: 2 / 4; grid-column: 2; position: relative; }
-/* 图不占高度，免得把这两行撑高：高度由对话框和数轴决定 */
+/* ---- 右边的冷却条：和卡片、数轴并排。敌人的名字框黑底白字 ---- */
+.linepage .timeline { grid-row: 1 / 3; grid-column: 2; position: relative; }
+/* 图不占高度，免得把这两行撑高：高度由卡片和数轴决定 */
 .linepage .timeline svg { position: absolute; left: 0; top: 0; }
 .linepage .timeline text { font: inherit; font-size: 13px; fill: var(--ink); font-variant-numeric: tabular-nums; }
 .linepage .timeline .sec { text-anchor: middle; paint-order: stroke; stroke: var(--paper); stroke-width: 4px; }
@@ -140,9 +138,9 @@
 .linepage .timeline .chip.mine .who { text-decoration: underline; }
 .linepage .timeline .chip .count { font-size: 11px; font-weight: 400; }
 
-/* ---- 对话框：数轴上面，下边一个尖角指着说话的人。--tail 是尖角的横坐标 ---- */
+/* ---- 对话框：数轴下面，上边一个尖角指着说话的人。--tail 是尖角的横坐标 ---- */
 .linepage .talk {
-  position: relative; margin-bottom: 8px;
+  position: relative; margin-top: 8px;
   display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: start;
   padding: 14px 18px; background: var(--paper); border: 2px solid var(--ink);
   box-sizing: border-box; height: 136px; /* 两行话加一排选项放得下；固定高，换成别的话时数轴不跳。不能 overflow，会把尖角剪掉 */
@@ -154,8 +152,8 @@
   content: ''; position: absolute; left: var(--tail, 50%); transform: translateX(-50%);
   border-style: solid; border-color: transparent;
 }
-.linepage .talk::before { top: 100%; border-width: 14px 11px 0; border-top-color: var(--ink); }
-.linepage .talk::after { top: calc(100% - 2px); border-width: 11px 8px 0; border-top-color: var(--paper); }
+.linepage .talk::before { bottom: 100%; border-width: 0 11px 14px; border-bottom-color: var(--ink); }
+.linepage .talk::after { bottom: calc(100% - 2px); border-width: 0 8px 11px; border-bottom-color: var(--paper); }
 /* 没有选项的话（师傅教的）只有一行 */
 .linepage .talk.hint .who { grid-row: auto; }
 .linepage .talk.hint .options { display: none; }

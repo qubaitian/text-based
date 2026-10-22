@@ -67,8 +67,6 @@ function decoAt(place: string, k: number) {
   return list[(h >>> 8) % list.length];
 }
 
-const meters = (n: number) => `${n.toFixed(2)} 米`;
-
 /** 钱包地址太长，只留头尾：0x12ab…9f3c */
 const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
@@ -131,10 +129,10 @@ export class LineView {
     this.root.innerHTML = `
       <div class="stage"></div>
       <div class="cards"></div>
-      <div class="talk" hidden></div>
       <div class="axiswrap"><div class="axis"></div><svg class="fx"><defs>
         <marker id="fxtip" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto">
           <path d="M0 0 L10 5 L0 10 z" fill="#000"/></marker></defs></svg></div>
+      <div class="talk" hidden></div>
       <div class="actions"></div>
       <div class="timeline"></div>
       <div class="sysmask" hidden><div class="sysbox">
@@ -345,7 +343,7 @@ export class LineView {
     if (key !== this.cardKey) {
       this.cardKey = key;
       this.cards.innerHTML = list.map((u) => `<div class="card ${u.side}${u === me ? ' mine' : ''}" data-card="${u.id}">
-        <div class="head"><span class="name">${u.name}</span><span class="dist"></span></div>
+        <div class="head"><span class="name">${u.name}</span></div>
         ${(['hp', 'mp', 'sp', 'cd'] as const).map((k) => `<div class="row" data-k="${k}">
           <span>${{ hp: '血', mp: '内力', sp: '脚力', cd: '冷却' }[k]}</span><div class="bar"><i></i></div><span class="num"></span></div>`).join('')}
         <div class="buffs"></div>
@@ -353,7 +351,6 @@ export class LineView {
     }
     for (const u of list) {
       const card = this.cards.querySelector<HTMLElement>(`[data-card="${u.id}"]`)!;
-      card.querySelector('.dist')!.textContent = u === me ? '自己' : me ? meters(round(Math.abs(u.x - me.x))) : '';
       const set = (k: string, f: number, text: string) => {
         const row = card.querySelector(`[data-k="${k}"]`)!;
         row.querySelector<HTMLElement>('i')!.style.width = `${Math.max(0, Math.min(1, f)) * 100}%`;
@@ -606,7 +603,7 @@ export class LineView {
     this.root.querySelector<HTMLElement>('.sysmask')!.hidden = !open;
   }
 
-  // ---- 对话框：所有说的话都在这里，放在数轴上面，下边一个尖角指着说话的人。点选项就告诉服务器 ----
+  // ---- 对话框：所有说的话都在这里，放在数轴下面，上边一个尖角指着说话的人。点选项就告诉服务器 ----
 
   private bindTalk() {
     this.root.querySelector('.talk')!.addEventListener('click', (e) => {
