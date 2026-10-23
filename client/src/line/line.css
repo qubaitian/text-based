@@ -60,6 +60,8 @@
 /* 被打中时反色闪两下；武学里箭头指着的敌人，卡片外面加一圈粗框 */
 .linepage .card.inv, .linepage .axis .label.inv { filter: invert(1); }
 .linepage .card.aimed { outline: 3px solid var(--ink); outline-offset: 2px; }
+/* 打坏的敌人：灰着留到这一仗打完，别的卡片不挪位置 */
+.linepage .card.down, .linepage .axis .down { opacity: 0.3; }
 .linepage .card > *:not(.head) { margin: 0 10px; }
 .linepage .card .head {
   display: flex; justify-content: space-between; align-items: baseline; gap: 8px;

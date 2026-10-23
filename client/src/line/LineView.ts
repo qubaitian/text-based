@@ -28,6 +28,7 @@ const FLY = 220; // 黑点沿弧线飞过去要多久
 const FLASH_STEP = 120; // 被打中的反色闪两下：每段多长，反色、正常、反色
 const FLASH_END = 3 * FLASH_STEP;
 const RISE = 900; // 飘字飘多久
+const FX_END = FLY + RISE; // 一次攻击效果从头到尾多久：打坏的敌人至少留这么久，看得到效果放完
 
 // ---- 数轴的尺寸（像素） ----
 const PAD = 28; // 数轴两头留的空
@@ -110,6 +111,10 @@ export class LineView {
   private cardHover: string | null = null; // 鼠标停在谁的卡片上
   private lastHit: number | null = null; // 上次看到的出招编号，变了就播攻击效果
   private flash: { id: string; at: number } | null = null; // 谁在反色闪，从什么时候开始（performance.now）
+  // 这一仗里打坏的敌人：卡片和名字框灰着留在原地，别的卡片就不会挪位置，免得点错人。
+  // 打完这一仗、攻击效果也放完了才拿掉，所以最后一下打完，数轴也要等效果放完才换中间
+  private fallen: { u: Unit; until: number }[] = [];
+  private labelTop = new Map<string, number>(); // 每个名字框的上边在数轴区域里多高，飘字从这里往上飘
   private readonly root: HTMLElement;
   private readonly cards: HTMLElement;
   private readonly axis: HTMLElement;
@@ -178,7 +183,11 @@ export class LineView {
     this.cards.addEventListener('click', (e) => {
       const id = cardOf(e);
       if (!id) return;
-      if (this.mode !== 'move' && this.board?.units.find((u) => u.id === id)?.side === 'foe') return this.confirm();
+      // 只打箭头正指着的那个：点了够不着的、或者打坏了的敌人卡片，不能打到别人身上
+      if (this.mode !== 'move' && this.shown(this.board).find((u) => u.id === id)?.side === 'foe') {
+        if (id === this.aim) this.confirm();
+        return;
+      }
       this.talkTo(id);
     });
     // 鼠标停在敌人卡片上：武学里箭头换到他
@@ -209,11 +218,19 @@ export class LineView {
       void changeMap(this.root.querySelector('.stage')!, board.place, () => {
         this.board = this.next;
         this.next = null;
+        this.fallen = [];
         this.lastHit = this.board?.hit?.n ?? 0;
         this.render();
       });
       return;
     }
+    // 上一次还在、这一次没了的敌人，就是刚被打坏的
+    const now = performance.now();
+    for (const u of this.board?.units ?? [])
+      if (u.side === 'foe' && !board.units.some((v) => v.id === u.id))
+        this.fallen.push({ u: { ...u, hp: 0, to: null, cd: 0 }, until: now + FX_END });
+    // 一起留、一起拿掉：最后一下打完时，前面打坏的也留到效果放完，卡片才不会先挪一下
+    if (!inCombat(board) && this.fallen.every((f) => now >= f.until)) this.fallen = [];
     this.board = board;
     this.render();
     // 出招编号变了就播一次效果。刚连上时看到的是以前的出招，不播；重新开始后编号从 0 算起
@@ -226,6 +243,15 @@ export class LineView {
     this.root.remove();
     cancelAnimationFrame(this.raf);
     window.removeEventListener('keydown', this.onKey);
+  }
+
+  /** 要画出来的人：地图上的人，加上这一仗里打坏的敌人 */
+  private shown(b: Board | null): Unit[] {
+    return [...(b?.units ?? []), ...this.fallen.map((f) => f.u)];
+  }
+
+  private isFallen(id: string) {
+    return this.fallen.some((f) => f.u.id === id);
   }
 
   private talkTo(id: string) {
@@ -338,12 +364,12 @@ export class LineView {
 
   private renderCards(b: Board) {
     const me = unitOf(b);
-    const list = [...b.units].sort((p, q) => p.x - q.x);
-    const key = list.map((u) => u.id).join(',');
+    const list = this.shown(b).sort((p, q) => p.x - q.x);
+    const key = list.map((u) => u.id + (this.isFallen(u.id) ? '-' : '')).join(',');
     if (key !== this.cardKey) {
       this.cardKey = key;
-      this.cards.innerHTML = list.map((u) => `<div class="card ${u.side}${u === me ? ' mine' : ''}" data-card="${u.id}">
-        <div class="head"><span class="name">${u.name}</span></div>
+      this.cards.innerHTML = list.map((u) => `<div class="card ${u.side}${u === me ? ' mine' : ''}${this.isFallen(u.id) ? ' down' : ''}" data-card="${u.id}">
+        <div class="head"><span class="name">${u.name}</span>${this.isFallen(u.id) ? '<span>坏了</span>' : ''}</div>
         ${(['hp', 'mp', 'sp', 'cd'] as const).map((k) => `<div class="row" data-k="${k}">
           <span>${{ hp: '血', mp: '内力', sp: '脚力', cd: '冷却' }[k]}</span><div class="bar"><i></i></div><span class="num"></span></div>`).join('')}
         <div class="buffs"></div>
@@ -374,13 +400,15 @@ export class LineView {
   //      只看两边各 VIEW_HALF 米，看不见的人在两头写名字和距离 ----
 
   private renderAxis(b: Board) {
-    const xs = b.units.map((u) => u.x);
+    const units = this.shown(b);
+    const xs = units.map((u) => u.x);
     if (!xs.length) {
       this.axis.innerHTML = '';
       return;
     }
     const me = unitOf(b);
-    const fight = inCombat(b);
+    // 还留着打坏的敌人，就还按战斗中看，最后一下的效果放完以后视野才变
+    const fight = inCombat(b) || this.fallen.length > 0;
     let center: number, half: number;
     if (me && !fight) {
       center = me.x;
@@ -426,7 +454,7 @@ export class LineView {
     // 名字框按位置从左到右排，和左边的挤在一起就往上放一层。
     // 看不见的人贴在数轴那一头，写上方向和离自己几米，虚线框，没有箭头
     const ends: number[] = []; // 每一层最右边的名字框到哪里了
-    const labels = [...b.units].sort((p, q) => p.x - q.x).map((u) => {
+    const labels = units.sort((p, q) => p.x - q.x).map((u) => {
       const at = px(rel(u.x));
       const off = at < L ? -1 : at > R ? 1 : 0;
       const d = me ? `${Math.abs(u.x - me.x).toFixed(1)} 米` : '';
@@ -501,11 +529,13 @@ export class LineView {
 
     // 名字框和箭头：框底到数轴的箭头，叠在上层的箭头长一些。先画全部箭头，再画框，箭头穿过下层时被框盖住
     const top = (level: number) => y0 - ARROW - LABEL_H - level * ROW_H;
-    for (const { at, off, level } of labels)
-      if (!off) svg += `<line class="arrow" x1="${at}" y1="${top(level) + LABEL_H}" x2="${at}" y2="${y0 - 1}" marker-end="url(#tip)"/>`;
+    this.labelTop.clear();
+    for (const { u, at, off, level } of labels)
+      if (!off) svg += `<line class="arrow${this.isFallen(u.id) ? ' down' : ''}" x1="${at}" y1="${top(level) + LABEL_H}" x2="${at}" y2="${y0 - 1}" marker-end="url(#tip)"/>`;
     for (const { u, w, off, text, left, level } of labels) {
+      this.labelTop.set(u.id, top(level));
       const cls = ['label', u.side, u === me ? 'mine' : '', off ? 'off' : '', talkOf(b, u.id) && !b.talking ? 'talker' : '',
-        this.flashing(u.id) ? 'inv' : ''].join(' ');
+        this.flashing(u.id) ? 'inv' : '', this.isFallen(u.id) ? 'down' : ''].join(' ');
       svg += `<g class="${cls}" data-id="${u.id}">
         <rect x="${left}" y="${top(level)}" width="${w}" height="${LABEL_H}"/>
         <text x="${left + w / 2}" y="${top(level) + LABEL_H / 2 + 5}">${text}</text>
@@ -574,7 +604,8 @@ export class LineView {
       dot.remove();
       arc.remove();
       this.flash = { id: hit.to, at: performance.now() };
-      const dmg = make('text', { class: 'fxdmg', x: t, y: y0 - ARROW - 6 });
+      // 从被打的人自己的名字框上面飘起，不压在别人的名字框上
+      const dmg = make('text', { class: 'fxdmg', x: t, y: (this.labelTop.get(hit.to) ?? y0 - ARROW - LABEL_H) - 6 });
       dmg.textContent = `-${hit.power}`;
       setTimeout(() => dmg.remove(), RISE);
     };
